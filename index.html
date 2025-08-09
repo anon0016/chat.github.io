@@ -218,7 +218,7 @@ function logSys(t){addLine('sys','🛈 '+t)}
 const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 
 /* ====== WebRTC 基础（双通道：msg/file） ====== */
-const cfg={iceServers:[{urls:"stun:stun.l.google.com:19302"}]};
+const cfg={iceServers:[urls:'stun:stun.l.google.com:19302','stun:global.stun.twilio.com:3478','stun:stun.cloudflare.com:3478']};
 let pc, chMsg, chFile, isStarter=false;
 
 async function makePC(){
@@ -562,3 +562,4 @@ window.addEventListener('resize', ()=>{ const box=$('#chat'); box.scrollTop=box.
 </script>
 </body>
 </html>
+
