@@ -1,599 +1,321 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport"
-      content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>P2P Secure Chat · QR + Files + Rekey</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<title>P2P Minimal Connect · Files + QR</title>
 <style>
-  :root{
-    --bg:#0e1117;--fg:#e6edf3;--mut:#9da7b3;--card:#151b23;--line:#222b37;
-    --accent:#7aa2f7;--ok:#34d399;--bad:#ef4444;--warn:#ffd166;
-  }
+  :root{--bg:#0e1117;--fg:#e6edf3;--mut:#9da7b3;--card:#151b23;--line:#222b37;--acc:#7aa2f7;--ok:#34d399;--bad:#ef4444}
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--fg);
-       font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,Arial;}
-  .app{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;}
-  header{position:sticky;top:0;z-index:5;background:rgba(14,17,23,.86);
-         backdrop-filter:saturate(1.2) blur(8px);border-bottom:1px solid var(--line);padding:10px 12px;}
-  h1{font-size:18px;margin:0 0 2px}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,Arial}
+  header{position:sticky;top:0;z-index:5;background:rgba(14,17,23,.9);backdrop-filter:saturate(1.2) blur(8px);border-bottom:1px solid var(--line);padding:10px 12px}
+  h1{margin:0 0 4px;font-size:18px}
   .hint{color:var(--mut);font-size:12px}
-  .wrap{padding:12px 12px 108px;max-width:1100px;margin:0 auto}
+  .wrap{max-width:1100px;margin:0 auto;padding:12px}
   .grid{display:grid;gap:12px}
+  @media(min-width:1100px){.grid{grid-template-columns:1fr 1fr}}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
   .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .grow{flex:1}
-  button{
-    appearance:none;cursor:pointer;border:1px solid #2a3350;background:#0f1524;color:var(--fg);
-    padding:10px 14px;border-radius:12px;font-weight:600;font-size:15px;touch-action:manipulation;
-  }
+  .pill{padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:#0f1422;font-size:12px}
+  textarea,input[type=text]{width:100%;background:#0b0f14;color:var(--fg);border:1px solid #202736;border-radius:12px;padding:10px;font-family:ui-monospace,Consolas,monospace;font-size:13px}
+  button{appearance:none;cursor:pointer;border:1px solid #2a3350;background:#0f1524;color:var(--fg);padding:10px 14px;border-radius:12px;font-weight:600}
   button.primary{background:linear-gradient(180deg,#1b2240,#12172e);border-color:#2b3564}
   button:disabled{opacity:.5}
-  .pill{padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:#0f1422;font-size:12px}
-  textarea,.mono,input[type=text],input[type=password],input[type=url]{
-    width:100%;background:#0b0f14;color:var(--fg);border:1px solid #202736;border-radius:12px;padding:10px;
-    font-family:ui-monospace,Consolas,monospace;font-size:13px;
-  }
-  textarea{min-height:84px;resize:vertical}
-  .field{display:grid;gap:8px;margin:8px 0}
-  .state{display:flex;gap:8px;flex-wrap:wrap}
-  .chat{
-    height:34vh;max-height:40dvh;min-height:180px;overflow:auto;background:#0a0f17;border:1px solid #202736;
-    border-radius:12px;padding:10px;
-  }
+  .chat{height:260px;overflow:auto;background:#0a0f17;border:1px solid #202736;border-radius:12px;padding:10px}
   .me{color:#9ae6b4}.peer{color:#93c5fd}.sys{color:#fcd34d}
-  .composer{
-    position:fixed;left:0;right:0;bottom:0;z-index:10;background:rgba(14,17,23,.98);
-    border-top:1px solid var(--line);padding:8px 10px calc(8px + env(safe-area-inset-bottom));
-    display:flex;gap:8px;align-items:center;flex-wrap:wrap;
-  }
-  .composer input.msg{
-    flex:1;min-width:240px;border:1px solid #202736;background:#0b0f14;color:#fff;
-    border-radius:12px;padding:12px 12px;font-size:16px;
-  }
+  .mono{font-family:ui-monospace,Consolas,monospace}
+  .ok{color:var(--ok)}.bad{color:var(--bad)}
   .pbar{height:8px;background:#0a0f17;border:1px solid #253049;border-radius:999px;overflow:hidden}
-  .pbar>i{display:block;height:100%;background:linear-gradient(90deg,#52a9ff,#7aa2f7)}
-  .qrbox{display:grid;grid-template-columns:1fr;gap:8px}
-  canvas.qr{width:220px;height:220px;background:#fff;border-radius:8px}
+  .pbar>i{display:block;height:100%;background:linear-gradient(90deg,#52a9ff,#7aa2f7);width:0%}
+  .qr-grid{display:grid;gap:8px}
+  .qr-grid img{width:220px;height:220px;border-radius:8px;background:#fff}
   video#cam{width:100%;max-height:220px;border:1px solid #253049;border-radius:12px;background:#000}
-  @media(min-width:900px){
-    .grid{grid-template-columns:1fr 1fr}
-    .wrap{padding:16px 16px 120px}
-    .chat{height:420px}
-  }
-  .toast{
-    position:fixed;left:50%;transform:translateX(-50%);bottom:calc(86px + env(safe-area-inset-bottom));
-    background:#0b0f14;border:1px solid #28406e;color:#cfe3ff;padding:10px 12px;border-radius:10px;opacity:0;pointer-events:none;transition:.25s;
-  }
-  .toast.show{opacity:1}
-  .muted{color:var(--mut)} .small{font-size:12px}
 </style>
 </head>
 <body>
-<div class="app">
   <header>
-    <h1>🔐 P2P Secure Chat（QR / Files / Rekey）</h1>
-    <div class="hint">WebRTC · ECDH + HKDF + AES-GCM · 16字节指纹 · 计数器/防重放 · 可选口令 · 可选TURN</div>
+    <h1>🔐 P2P Minimal Connect（+ 文件 + 二维码）</h1>
+    <div class="hint">纯前端 · WebRTC · 先保证“创建/加入/聊天” + “文件传输” + “Offer/Answer 二维码”</div>
   </header>
 
   <div class="wrap">
     <div class="grid">
-      <details open class="card">
-        <summary>① 建立连接</summary>
-        <div class="field">
-          <div class="row">
-            <button id="btnOffer" class="primary grow">创建房间（生成 Offer）</button>
-            <button id="btnAnswer" class="grow">加入房间（用 Offer 生成 Answer）</button>
-          </div>
-          <div class="row">
-            <input type="password" id="passphrase" placeholder="可选：见面词 / 口令（双方一致）" />
-          </div>
-
-          <div class="row">
-            <label class="small" style="display:flex;align-items:center;gap:6px">
-              <input type="checkbox" id="relayOnly"> 仅走 TURN 中继（隐藏 IP）
-            </label>
-          </div>
-          <details class="field">
-            <summary>TURN 配置（可选）</summary>
-            <div class="field">
-              <input type="url" id="turnUrl" placeholder="turn:host:3478 或 turn:host:3478?transport=tcp" />
-              <input type="text" id="turnUser" placeholder="TURN 用户名" />
-              <input type="password" id="turnPass" placeholder="TURN 密码" />
-            </div>
-          </details>
+      <section class="card">
+        <h3>① 建立连接</h3>
+        <div class="row">
+          <button id="btnOffer" class="primary">创建房间（生成 Offer）</button>
+          <button id="btnAnswer">加入房间（用 Offer 生成 Answer）</button>
         </div>
+        <div class="row">
+          <label class="pill">连接：<b id="connState">new</b></label>
+          <label class="pill">通道/消息：<b id="dcState">-</b></label>
+          <label class="pill">通道/文件：<b id="fileDcState">-</b></label>
+          <label class="pill">ICE：<b id="iceState">new</b></label>
+        </div>
+        <div class="row" style="margin-top:4px">
+          <label class="pill">STUN 多源</label>
+          <label class="pill"><input type="checkbox" id="relayOnly"> 仅走TURN</label>
+        </div>
+        <details open>
+          <summary>本地 Offer</summary>
+          <textarea id="offerBox" readonly placeholder="点击“创建房间”后，这里会出现一长串 Base64"></textarea>
+          <div class="row"><button id="copyOffer">复制</button> <button id="qrOffer">二维码</button></div>
+        </details>
+        <details>
+          <summary>对方 Offer（加入方粘贴或扫码）</summary>
+          <textarea id="remoteOffer" placeholder="粘贴对方给你的 Offer（Base64）"></textarea>
+          <div class="row"><button id="scanOffer">扫码</button></div>
+        </details>
+        <details>
+          <summary>本地 Answer</summary>
+          <textarea id="answerBox" readonly placeholder="点击“加入房间”后，这里会出现一长串 Base64"></textarea>
+          <div class="row"><button id="copyAnswer">复制</button> <button id="qrAnswer">二维码</button></div>
+        </details>
+        <details>
+          <summary>对方 Answer（创建方粘贴或扫码）</summary>
+          <textarea id="remoteAnswer" placeholder="粘贴对方给你的 Answer（Base64）"></textarea>
+          <div class="row"><button id="scanAnswer">扫码</button></div>
+        </details>
+      </section>
 
-        <div class="field">
-          <label class="hint">本地 Offer</label>
-          <textarea id="offerBox" readonly></textarea>
+      <section class="card">
+        <h3>② 聊天 / 文件</h3>
+        <div class="chat" id="log"></div>
+        <div class="row" style="margin-top:8px">
+          <input id="msg" type="text" placeholder="输入消息… 回车发送" disabled>
+          <button id="btnSend" disabled>发送</button>
+        </div>
+        <div style="margin-top:10px">
           <div class="row">
-            <button id="copyOffer">复制</button>
-            <button id="shareOffer">分享</button>
-            <button id="qrOffer">二维码</button>
+            <input id="fileInput" type="file" />
+            <button id="btnSendFile" disabled>发送文件</button>
           </div>
-        </div>
-
-        <div class="field">
-          <label class="hint">对方 Offer（加入方粘贴或扫码）</label>
-          <textarea id="remoteOffer" placeholder="粘贴或扫码填入"></textarea>
-          <div class="row">
-            <button id="pasteOffer">粘贴</button>
-            <button id="scanOffer">扫码</button>
-            <button id="clrRO">清空</button>
-          </div>
-        </div>
-
-        <div class="field">
-          <label class="hint">本地 Answer</label>
-          <textarea id="answerBox" readonly></textarea>
-          <div class="row">
-            <button id="copyAnswer">复制</button>
-            <button id="shareAnswer">分享</button>
-            <button id="qrAnswer">二维码</button>
-          </div>
-        </div>
-
-        <div class="field">
-          <label class="hint">对方 Answer（创建方粘贴或扫码）</label>
-          <textarea id="remoteAnswer" placeholder="粘贴或扫码填入"></textarea>
-          <div class="row">
-            <button id="pasteAnswer">粘贴</button>
-            <button id="scanAnswer">扫码</button>
-            <button id="clrRA">清空</button>
-          </div>
-        </div>
-
-        <div class="state">
-          <span class="pill">连接：<b id="connState">idle</b></span>
-          <span class="pill">通道/消息：<b id="dc1">-</b></span>
-          <span class="pill">通道/文件：<b id="dc2">-</b></span>
-          <span class="pill">STUN：multi</span>
-        </div>
-      </details>
-
-      <details open class="card">
-        <summary>② 加密状态 / 聊天 / 文件</summary>
-        <div class="row" style="gap:6px;margin-bottom:6px">
-          <span class="pill">我的指纹：<b class="mono" id="fpLocal">-</b></span>
-          <span class="pill">对方指纹：<b class="mono" id="fpPeer">-</b></span>
-          <span class="pill">已收计数：<b class="mono" id="ctrPeer">0</b></span>
-        </div>
-        <div class="hint">核对 16 字节指纹（32位十六进制）一致再通信。计数器防重放。</div>
-
-        <div class="chat" id="chat"></div>
-
-        <div class="field">
-          <div class="row">
-            <input type="file" id="fileInput">
-            <button id="sendFileBtn" disabled>发送文件</button>
-            <button id="rekeyBtn" disabled>密钥轮换</button>
-          </div>
-          <div class="small muted">分片 AES-GCM；双端显示实时进度/速度/ETA。</div>
-          <div class="row">
+          <div class="row" style="margin-top:6px">
             <div style="flex:1">
-              <div class="small">发送：<span id="sendStat" class="muted">-</span></div>
-              <div class="pbar"><i id="sendBar" style="width:0%"></i></div>
+              <div class="mono small">发送：<span id="sendStat">-</span></div>
+              <div class="pbar"><i id="sendBar"></i></div>
             </div>
             <div style="flex:1">
-              <div class="small">接收：<span id="recvStat" class="muted">-</span></div>
-              <div class="pbar"><i id="recvBar" style="width:0%"></i></div>
+              <div class="mono small">接收：<span id="recvStat">-</span></div>
+              <div class="pbar"><i id="recvBar"></i></div>
             </div>
           </div>
-          <div id="recvFiles" class="small"></div>
+          <div id="recvFiles" class="mono small" style="margin-top:6px"></div>
         </div>
-      </details>
+      </section>
     </div>
 
-    <details class="card">
-      <summary>③ 二维码（生成 / 扫码）</summary>
-      <div class="qrbox">
-        <canvas id="qrCanvas" class="qr"></canvas>
+    <section class="card">
+      <h3>③ 二维码（生成 / 扫码）</h3>
+      <div class="qr-grid">
+        <img id="qrImg" alt="QR" />
         <video id="cam" playsinline muted></video>
-        <div class="row">
-          <button id="stopCam">停止摄像头</button>
-        </div>
-        <div class="small muted">生成二维码给对方扫；或扫码导入 Offer/Answer。</div>
+        <div class="row"><button id="stopCam">停止摄像头</button></div>
+        <div class="mono small" style="color:var(--mut)">生成二维码（使用公共 QR 图片 API）；扫码优先用 BarcodeDetector。</div>
       </div>
-    </details>
-  </div>
+    </section>
 
-  <div class="composer">
-    <input id="msg" class="msg" placeholder="输入消息…" autocapitalize="off" autocorrect="off" autocomplete="off" />
-    <button id="sendBtn" class="primary" disabled>发送</button>
+    <section class="card">
+      <h3>④ 自检（测试用例）</h3>
+      <div id="tests" class="mono small"></div>
+      <div class="row" style="margin-top:6px"><button id="runTests">运行测试</button></div>
+    </section>
   </div>
-
-  <div id="toast" class="toast">OK</div>
-</div>
 
 <script>
-/* ===== 杂项工具 ===== */
-const $ = s=>document.querySelector(s);
-const toast=(t)=>{const el=$('#toast');el.textContent=t||'OK';el.classList.add('show');if(navigator.vibrate)navigator.vibrate(10);clearTimeout(toast._t);toast._t=setTimeout(()=>el.classList.remove('show'),1200);};
-function fmtBytes(n){const u=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return n.toFixed(n<10&&i>0?2:0)+' '+u[i];}
-function addLine(who,text){const box=$('#chat');const p=document.createElement('div');p.className=who;p.textContent=(who==='me'?'我: ':who==='peer'?'对方: ':'')+text;box.appendChild(p);box.scrollTop=box.scrollHeight;}
-function b64enc(u8){return btoa(String.fromCharCode(...u8))}
-function b64dec(str){return new Uint8Array([...atob(str)].map(c=>c.charCodeAt(0)))}
-function hex(u8){return [...new Uint8Array(u8)].map(b=>b.toString(16).padStart(2,'0')).join('').toUpperCase()}
-function pick(n){return crypto.getRandomValues(new Uint8Array(n))}
-function logSys(t){addLine('sys','🛈 '+t)}
-const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+'use strict';
+// ========= 小工具 =========
+const $=s=>document.querySelector(s);
+const logBox=$('#log');
+function logLine(cls, text){ const d=document.createElement('div'); d.className=cls; d.textContent=text; logBox.appendChild(d); logBox.scrollTop=logBox.scrollHeight; }
+const info=t=>logLine('sys','🛈 '+t);
+const mine=t=>logLine('me','我: '+t);
+const peer=t=>logLine('peer','对方: '+t);
+function b64e(obj){ return btoa(JSON.stringify(obj)); }
+function b64d(b64){ return JSON.parse(atob(b64)); }
+function fmtBytes(n){ const u=['B','KB','MB','GB','TB']; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++;} return n.toFixed(n<10&&i>0?2:0)+' '+u[i]; }
 
-/* ===== WebRTC：双通道 + 多 STUN/TURN ===== */
-function buildRTCConfig(){
-  const iceServers=[
-    {urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478','stun:global.stun.twilio.com:3478']}
-  ];
-  const turnUrl=$('#turnUrl').value.trim(); if(turnUrl){ iceServers.push({urls:turnUrl,username:$('#turnUser').value,credential:$('#turnPass').value}); }
-  const cfg={iceServers};
-  if($('#relayOnly').checked){ cfg.iceTransportPolicy='relay'; }
-  return cfg;
+// ========= WebRTC =========
+const iceServers=[{urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478','stun:global.stun.twilio.com:3478']}];
+let pc, dcText, dcFile; let isHost=false;
+function buildCfg(){ const cfg={iceServers:[...iceServers]}; if($('#relayOnly').checked) cfg.iceTransportPolicy='relay'; return cfg; }
+async function newPC(){
+  if(pc){ try{ pc.onicecandidate=null; pc.onconnectionstatechange=null; pc.close(); }catch(e){} }
+  pc=new RTCPeerConnection(buildCfg());
+  pc.onconnectionstatechange=()=>{ $('#connState').textContent=pc.connectionState; };
+  pc.oniceconnectionstatechange=()=>{ $('#iceState').textContent=pc.iceConnectionState; };
+  pc.ondatachannel=e=>{ if(e.channel.label==='chat'){ dcText=e.channel; bindTextDC(); } if(e.channel.label==='file'){ dcFile=e.channel; bindFileDC(); } };
+  pc.onicecandidate=e=>{ if(e.candidate===null) fillLocalDesc(); };
 }
-let pc,chMsg,chFile,isStarter=false;
+function fillLocalDesc(){ if(!pc||!pc.localDescription) return; const v=b64e(pc.localDescription); if(isHost) $('#offerBox').value=v; else $('#answerBox').value=v; }
 
-async function makePC(){
-  pc=new RTCPeerConnection(buildRTCConfig());
-  pc.oniceconnectionstatechange=()=>$('#connState').textContent=pc.iceConnectionState;
-  pc.onconnectionstatechange=()=>$('#connState').textContent=pc.connectionState;
-  pc.onicecandidate=e=>{
-    if(e.candidate===null){
-      const sdp=btoa(JSON.stringify(pc.localDescription));
-      if(isStarter) $('#offerBox').value=sdp; else $('#answerBox').value=sdp;
-    }
-  };
-  pc.ondatachannel=e=>{
-    if(e.channel.label==='msg'){ chMsg=e.channel; bindMsgDC(); }
-    if(e.channel.label==='file'){ chFile=e.channel; bindFileDC(); }
-  };
+// ========= 数据通道：文本 =========
+function bindTextDC(){
+  $('#dcState').textContent=dcText.readyState;
+  dcText.onopen=()=>{ $('#dcState').textContent='open'; $('#msg').disabled=false; $('#btnSend').disabled=false; info('文本通道 open'); };
+  dcText.onclose=()=>{ $('#dcState').textContent='closed'; $('#msg').disabled=true; $('#btnSend').disabled=true; };
+  dcText.onmessage=e=>peer(e.data);
 }
 
-/* ======= 加密：ECDH + HKDF，消息/文件分钥；指纹16B；计数器/防重放；轮换 ======= */
-let myECDH,myPubRaw,keys={msg:null,file:null}, sessionId=null, fpLocal=null;
-let sendCounter=0, lastPeerCounter=-1;  // 防重放（严格递增）
-const REKEY_EVERY = 500;
-
-async function startECDH(){
-  myECDH=await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveKey','deriveBits']);
-  myPubRaw=await crypto.subtle.exportKey('raw',myECDH.publicKey);
-  sendCtrl({type:'pub',data:b64enc(new Uint8Array(myPubRaw))});
-}
-async function deriveKeys(peerRaw){
-  const peerKey=await crypto.subtle.importKey('raw',peerRaw,{name:'ECDH',namedCurve:'P-256'},true,[]);
-  const shared=await crypto.subtle.deriveBits({name:'ECDH',public:peerKey}, myECDH.privateKey, 256);
-  const sharedU8=new Uint8Array(shared);
-
-  const pubs=[new Uint8Array(myPubRaw), new Uint8Array(peerRaw)].sort((a,b)=>a[0]-b[0]||a.length-b.length);
-  const cat=new Uint8Array(pubs[0].length+pubs[1].length); cat.set(pubs[0],0); cat.set(pubs[1],pubs[0].length);
-  const pass = ($('#passphrase').value || '');
-  const passSalt = pass ? new TextEncoder().encode(pass) : new Uint8Array(0);
-  const saltCat = new Uint8Array(cat.length + passSalt.length); saltCat.set(cat,0); saltCat.set(passSalt,cat.length);
-
-  async function hkdf(info,len){
-    const baseKey=await crypto.subtle.importKey('raw',sharedU8,{name:'HKDF'},false,['deriveBits']);
-    const bits=await crypto.subtle.deriveBits({name:'HKDF',hash:'SHA-256',salt:await crypto.subtle.digest('SHA-256',saltCat),info:new TextEncoder().encode(info)},baseKey,len*8);
-    return new Uint8Array(bits);
-  }
-  const kMsg = await hkdf('p2p/msg',32);
-  const kFile= await hkdf('p2p/file',32);
-  const sid  = await hkdf('p2p/session',32);
-  keys.msg  = await crypto.subtle.importKey('raw',kMsg,{name:'AES-GCM'},false,['encrypt','decrypt']);
-  keys.file = await crypto.subtle.importKey('raw',kFile,{name:'AES-GCM'},false,['encrypt','decrypt']);
-  sessionId = sid;
-
-  const fpBuf = await crypto.subtle.digest('SHA-256', new Uint8Array([...cat, ...kMsg]));
-  fpLocal = hex(new Uint8Array(fpBuf).slice(0,16));
-  $('#fpLocal').textContent=fpLocal; sendCtrl({type:'fp',data:fpLocal});
-  sendCounter=0; lastPeerCounter=-1;
-  $('#rekeyBtn').disabled=false; $('#sendFileBtn').disabled=!(chFile&&chFile.readyState==='open');
-  logSys('密钥就绪（消息/文件分钥，16B指纹，计数器复位）✅');
+// ========= 数据通道：文件（分片） =========
+const CHUNK=64*1024; let sending=null, receiving=null;
+function bindFileDC(){
+  $('#fileDcState').textContent=dcFile.readyState;
+  dcFile.binaryType='arraybuffer';
+  dcFile.bufferedAmountLowThreshold=1<<20;
+  dcFile.onopen=()=>{ $('#fileDcState').textContent='open'; $('#btnSendFile').disabled=false; info('文件通道 open'); };
+  dcFile.onclose=()=>{ $('#fileDcState').textContent='closed'; $('#btnSendFile').disabled=true; };
+  dcFile.onmessage=onFileChunk;
 }
 
-async function encryptPacket(obj){
-  // 结构： {ctr, ts, type, text?} → JSON → AES-GCM(iv)
-  obj.ctr = ++sendCounter;
-  obj.ts  = Date.now();
-  const buf=new TextEncoder().encode(JSON.stringify(obj));
-  const iv=pick(12);
-  const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},keys.msg,buf));
-  return b64enc(new Uint8Array([...iv,...ct]));
-}
-async function decryptPacket(payload){
-  const raw=b64dec(payload); const iv=raw.slice(0,12), ct=raw.slice(12);
-  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv},keys.msg,ct);
-  const obj=JSON.parse(new TextDecoder().decode(plain));
-  // 重放防护：严格递增
-  if(typeof obj.ctr!=='number' || obj.ctr<=lastPeerCounter){ throw new Error('replay/old packet'); }
-  lastPeerCounter=obj.ctr; $('#ctrPeer').textContent=String(lastPeerCounter);
-  // 简单时间窗（可选）
-  if(Math.abs(Date.now()-obj.ts)>1000*60*60*24){ throw new Error('timestamp out-of-window'); }
-  return obj;
-}
-
-/* 密钥轮换：再次 ECDH */
-function requestRekey(){ sendCtrl({type:'rekey-req'}); logSys('发起密钥轮换请求…'); }
-async function acceptRekey(){
-  await startECDH(); // 重新发公钥，流程同初次
-  logSys('开始轮换：已生成新公钥。');
-}
-
-/* ===== 文本消息 ===== */
-async function sendMsg(){
-  const input=$('#msg'); const text=input.value.trim(); if(!text) return;
-  if(!chMsg || chMsg.readyState!=='open'){ logSys('通道未就绪'); return; }
-  if(!keys.msg){ logSys('密钥未协商'); return; }
-  const packet=await encryptPacket({type:'text',text});
-  chMsg.send(packet); addLine('me',text); input.value='';
-
-  if(sendCounter%REKEY_EVERY===0){ requestRekey(); }
-}
-
-/* ===== 文件传输（分片 AES-GCM，文件通道二进制；元信息走加密的消息通道） ===== */
-const CHUNK_SIZE = 64*1024;
-let sending=null, receiving=null;
-
-$('#sendFileBtn').onclick=async()=>{
-  const f=$('#fileInput').files[0]; if(!f) return alert('先选文件');
-  if(!chFile || chFile.readyState!=='open') return alert('文件通道未就绪');
-  if(!keys.file) return alert('密钥未协商');
-  // file-meta 走加密消息
-  chMsg.send(await encryptPacket({type:'file-meta',name:f.name,size:f.size,mime:f.type||'application/octet-stream'}));
+$('#btnSendFile').onclick=async()=>{
+  const f=$('#fileInput').files[0]; if(!f){ alert('先选文件'); return; }
+  if(!dcFile || dcFile.readyState!=='open'){ alert('文件通道未打开'); return; }
   await sendFile(f);
 };
+
 async function sendFile(file){
-  if(sending) return alert('已有文件在发送');
-  sending={size:file.size,sent:0,name:file.name,start:performance.now()};
+  if(sending){ alert('已有任务在发送'); return; }
+  sending={name:file.name,size:file.size,sent:0,start:performance.now()};
+  // 先发一个 JSON 头包（文本通道通知）
+  if(dcText && dcText.readyState==='open'){ dcText.send('[FILE-META]'+JSON.stringify({name:file.name,size:file.size,type:file.type||'application/octet-stream'})); }
   const reader=file.stream().getReader(); let idx=0;
   while(true){
     const {value,done}=await reader.read(); if(done) break;
-    const iv=pick(12);
-    const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},keys.file,value));
-    // 片头：seq(4B)|iv(12B)
-    const hdr=new Uint8Array(16); new DataView(hdr.buffer).setUint32(0,idx); hdr.set(iv,4);
-    const packet=new Uint8Array(hdr.length+ct.length); packet.set(hdr,0); packet.set(ct,hdr.length);
-    while(chFile.bufferedAmount>(1<<20)) await sleep(10); // 背压
-    chFile.send(packet);
+    // 包格式： seq(uint32) + payload
+    const hdr=new Uint8Array(4); new DataView(hdr.buffer).setUint32(0,idx);
+    const pkt=new Uint8Array(hdr.length+value.length); pkt.set(hdr,0); pkt.set(value,hdr.length);
+    while(dcFile.bufferedAmount>(1<<20)) await new Promise(r=>setTimeout(r,10));
+    dcFile.send(pkt);
     sending.sent+=value.length; idx++; updateSendProgress();
   }
-  chMsg.send(await encryptPacket({type:'file-done'}));
-  logSys(`文件已发送完成：${file.name} (${fmtBytes(file.size)})`);
-  sending=null; updateSendProgress();
+  // 收尾包： seq = 0xFFFFFFFF
+  const end=new Uint8Array(4); new DataView(end.buffer).setUint32(0,0xFFFFFFFF);
+  dcFile.send(end);
 }
+
 function updateSendProgress(){
-  const bar=$('#sendBar'), stat=$('#sendStat');
-  if(!sending){ bar.style.width='0%'; stat.textContent='-'; return; }
-  const r=sending.sent/sending.size, dt=(performance.now()-sending.start)/1000, sp=sending.sent/dt, eta=(sending.size-sending.sent)/(sp||1);
-  bar.style.width=(r*100).toFixed(2)+'%';
-  stat.textContent=`${(r*100).toFixed(1)}% · ${fmtBytes(sending.sent)}/${fmtBytes(sending.size)} · ${fmtBytes(sp)}/s · ETA ${eta.toFixed(1)}s`;
+  const r=sending.sent/sending.size; $('#sendBar').style.width=(r*100).toFixed(2)+'%';
+  const dt=(performance.now()-sending.start)/1000; const sp=sending.sent/dt; const eta=(sending.size-sending.sent)/(sp||1);
+  $('#sendStat').textContent=`${(r*100).toFixed(1)}% · ${fmtBytes(sending.sent)}/${fmtBytes(sending.size)} · ${fmtBytes(sp)}/s · ETA ${eta.toFixed(1)}s`;
+  if(sending.sent>=sending.size){ $('#sendStat').textContent+= ' · 待对方完成重组'; }
 }
 
-/* 接收文件 */
-function onRecvFileMeta(m){
-  receiving={name:m.name||'file.bin',size:m.size|0,mime:m.mime||'application/octet-stream',chunks:[],received:0,start:performance.now()};
-  $('#recvFiles').insertAdjacentHTML('beforeend', `<div id="recvInfo" class="small">准备接收：${receiving.name} (${fmtBytes(receiving.size)})</div>`);
-  updateRecvProgress();
-}
-function onRecvFileDone(){
-  if(!receiving) return;
-  const blob=new Blob(receiving.chunks,{type:receiving.mime});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a'); a.href=url; a.download=receiving.name; a.textContent=`⬇️ 保存 ${receiving.name} (${fmtBytes(receiving.size||receiving.received)})`;
-  $('#recvFiles').appendChild(document.createElement('div')).appendChild(a);
-  logSys(`文件接收完成：${receiving.name} (${fmtBytes(receiving.size||receiving.received)})`);
-  receiving=null; updateRecvProgress();
-}
-async function onRawFileMessage(e){
-  if(!keys.file) return; // 尚未协商，不处理
+function onFileChunk(e){
   const buf=new Uint8Array(e.data);
+  if(buf.length===4 && new DataView(buf.buffer).getUint32(0)===0xFFFFFFFF){
+    // 完成
+    if(!receiving) return;
+    const blob=new Blob(receiving.parts,{type:receiving.type});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=receiving.name; a.textContent=`⬇️ 保存 ${receiving.name} (${fmtBytes(receiving.total)})`;
+    $('#recvFiles').appendChild(document.createElement('div')).appendChild(a);
+    receiving=null; $('#recvBar').style.width='0%'; $('#recvStat').textContent='-';
+    return;
+  }
   const seq=new DataView(buf.buffer,buf.byteOffset,4).getUint32(0);
-  const iv =buf.slice(4,16);
-  const ct =buf.slice(16);
-  try{
-    const plain=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv},keys.file,ct));
-    if(!receiving){ receiving={name:'file.bin',size:0,mime:'application/octet-stream',chunks:[],received:0,start:performance.now()}; }
-    receiving.chunks.push(plain); receiving.received+=plain.length;
-    updateRecvProgress();
-  }catch(err){ logSys('文件片段解密失败：'+err.message); }
+  const payload=buf.slice(4);
+  if(!receiving){ receiving={name:'file.bin',type:'application/octet-stream',total:0,parts:[],start:performance.now()}; }
+  receiving.parts.push(payload); receiving.total+=payload.length; updateRecvProgress();
 }
+
 function updateRecvProgress(){
-  const bar=$('#recvBar'), stat=$('#recvStat');
-  if(!receiving){ bar.style.width='0%'; stat.textContent='-'; const info=$('#recvInfo'); if(info) info.remove(); return; }
-  const got=receiving.received, total=receiving.size||got, r= total? got/total : 0;
-  const dt=(performance.now()-receiving.start)/1000, sp=got/dt, eta=(total&&sp>0)?(total-got)/sp:0;
-  bar.style.width=(r*100).toFixed(2)+'%';
-  stat.textContent=`${(r*100).toFixed(1)}% · ${fmtBytes(got)}/${total?fmtBytes(total):'未知'} · ${fmtBytes(sp)}/s · ETA ${total?eta.toFixed(1)+'s':'?'}`
+  const got=receiving.total; const dt=(performance.now()-receiving.start)/1000; const sp=got/dt;
+  $('#recvBar').style.width='100%'; // 无对端总大小，这里不显示百分比，直到 meta 到来
+  $('#recvStat').textContent=`${fmtBytes(got)} · ${fmtBytes(sp||0)}/s`;
 }
 
-/* ===== 控制/消息通道绑定 ===== */
-function bindMsgDC(){
-  chMsg.binaryType='arraybuffer';
-  chMsg.onopen=async()=>{
-    $('#dc1').textContent='open'; $('#sendBtn').disabled=false; $('#rekeyBtn').disabled=false;
-    logSys('消息通道 open，开始 ECDH 协商…'); await startECDH();
-  };
-  chMsg.onclose=()=>{$('#dc1').textContent='closed'; $('#sendBtn').disabled=true; $('#rekeyBtn').disabled=true;}
-  chMsg.onmessage=async(e)=>{
-    try{
-      // 控制消息是明文JSON；真正用户消息走加密包
-      if(typeof e.data==='string'&&(e.data[0]==='{'||e.data[0]==='[')){
-        const m=JSON.parse(e.data);
-        if(m.__ctrl){
-          if(m.type==='pub'){ await deriveKeys(b64dec(m.data)); }
-          else if(m.type==='fp'){ $('#fpPeer').textContent=m.data; }
-          else if(m.type==='rekey-req'){ logSys('收到轮换请求，开始轮换'); await acceptRekey(); }
-          return;
-        }
-      }
-      if(!keys.msg){ addLine('sys','[等待密钥协商…]'); return; }
-      const obj=await decryptPacket(e.data);
-      if(obj.type==='text'){ addLine('peer',obj.text); }
-      else if(obj.type==='file-meta'){ onRecvFileMeta(obj); }
-      else if(obj.type==='file-done'){ onRecvFileDone(); }
-    }catch(err){ addLine('sys','消息错误：'+err.message); }
-  };
-}
-function bindFileDC(){
-  chFile.binaryType='arraybuffer';
-  chFile.bufferedAmountLowThreshold=1<<20;
-  chFile.onopen=()=>{ $('#dc2').textContent='open'; $('#sendFileBtn').disabled=!keys.file; };
-  chFile.onclose=()=>{ $('#dc2').textContent='closed'; $('#sendFileBtn').disabled=true; };
-  chFile.onmessage=onRawFileMessage;
+// 文本通道收到文件元信息时，更新 UI
+function onTextMessage(s){
+  if(s.startsWith('[FILE-META]')){
+    try{ const meta=JSON.parse(s.slice(11)); if(!receiving) receiving={name:meta.name||'file.bin',type:meta.type||'application/octet-stream',total:0,parts:[],start:performance.now()}; else { receiving.name=meta.name||receiving.name; receiving.type=meta.type||receiving.type; } info(`准备接收文件：${receiving.name} (${fmtBytes(meta.size||0)})`); }catch{}
+    return;
+  }
+  peer(s);
 }
 
-/* ===== 建链流程 ===== */
+// ========= 按钮逻辑 =========
 $('#btnOffer').onclick=async()=>{
-  isStarter=true; await makePC();
-  chMsg = pc.createDataChannel('msg',{ordered:true}); bindMsgDC();
-  chFile= pc.createDataChannel('file',{ordered:true}); bindFileDC();
-  const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
-  $('#dc1').textContent='opening…'; $('#dc2').textContent='opening…';
-  logSys('已生成 Offer，可以复制/分享/二维码。');
+  try{
+    isHost=true; await newPC();
+    dcText=pc.createDataChannel('chat',{ordered:true}); bindTextDC();
+    dcFile=pc.createDataChannel('file',{ordered:true}); bindFileDC();
+    const offer=await pc.createOffer({offerToReceiveAudio:false,offerToReceiveVideo:false});
+    await pc.setLocalDescription(offer);
+    info('Offer 已创建，等 1-3 秒待 ICE 收敛后会自动出现在“本地 Offer”。');
+  }catch(err){ info('创建 Offer 失败：'+err.message); }
 };
+
 $('#btnAnswer').onclick=async()=>{
-  isStarter=false; await makePC();
-  const remote=$('#remoteOffer').value.trim(); if(!remote) return alert('先粘贴或扫码 Offer');
-  const offer=JSON.parse(atob(remote));
-  await pc.setRemoteDescription(new RTCSessionDescription(offer));
-  const answer=await pc.createAnswer(); await pc.setLocalDescription(answer);
-  logSys('已生成 Answer，发回对方（可二维码）。');
+  try{
+    isHost=false; await newPC();
+    const remote=$('#remoteOffer').value.trim(); if(!remote){ alert('先粘贴对方 Offer (Base64)'); return; }
+    const offer=b64d(remote);
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer=await pc.createAnswer(); await pc.setLocalDescription(answer);
+    info('Answer 已创建，等 1-3 秒后会自动出现在“本地 Answer”。');
+  }catch(err){ info('加入失败：'+err.message); }
 };
+
 $('#remoteAnswer').addEventListener('change', async ()=>{
-  const v=$('#remoteAnswer').value.trim(); if(!v) return;
-  const answer=JSON.parse(atob(v));
-  await pc.setRemoteDescription(new RTCSessionDescription(answer));
-  logSys('Answer 已设置，等待通道打开…');
+  try{
+    const v=$('#remoteAnswer').value.trim(); if(!v) return;
+    const ans=b64d(v);
+    await pc.setRemoteDescription(new RTCSessionDescription(ans));
+    info('已设置对方 Answer，等待通道打开…');
+  }catch(err){ info('设置 Answer 失败：'+err.message); }
 });
 
-/* ===== 发送按钮 ===== */
-$('#sendBtn').onclick=sendMsg;
-$('#msg').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMsg(); }});
-$('#rekeyBtn').onclick=()=>requestRekey();
-
-/* ===== 复制/粘贴/分享 ===== */
-async function copySel(id){ const v=$(id).value; if(!v) return; await navigator.clipboard.writeText(v); toast('已复制'); }
-async function pasteSel(id){ try{const t=await navigator.clipboard.readText(); if(t){ $(id).value=t; toast('已粘贴'); }}catch{ toast('无法读取剪贴板'); } }
-async function shareText(text,title){ if(!text) return; if(navigator.share){ try{ await navigator.share({title:title||'P2P SDP',text}); }catch{} } else { await navigator.clipboard.writeText(text); toast('已复制'); } }
-$('#copyOffer').onclick=()=>copySel('#offerBox'); $('#copyAnswer').onclick=()=>copySel('#answerBox');
-$('#pasteOffer').onclick=()=>pasteSel('#remoteOffer'); $('#pasteAnswer').onclick=()=>pasteSel('#remoteAnswer');
-$('#clrRO').onclick=()=>{$('#remoteOffer').value='';}; $('#clrRA').onclick=()=>{$('#remoteAnswer').value='';};
-$('#shareOffer').onclick=()=>shareText($('#offerBox').value,'WebRTC Offer');
-$('#shareAnswer').onclick=()=>shareText($('#answerBox').value,'WebRTC Answer');
-
-/* ===== 真·二维码（生成 + 扫码） ===== */
-/* 轻量 QR 生成器：qrcode-generator (MIT) 的精简版（v=4-M 自动适配；足够容纳 base64 的 SDP 文本）
-   下面是压缩后的核心，来源同作者仓库，保留必要 API：qrcode(typeNumber, errorCorrectLevel).addData().make(); getModuleCount(); isDark(r,c) */
-!function(o){function r(o,r){this.typeNumber=o,this.errorCorrectLevel=r,this.modules=null,this.moduleCount=0,this.dataList=[],this.dataCache=null}function t(o,r){this.mode=n.MODE_8BIT_BYTE,this.data=o,this.parsed=r||function(o){for(var r=[],t=0;t<o.length;t++)r.push(o.charCodeAt(t));return r}(o)}var n={PAD0:236,PAD1:17,MODE_8BIT_BYTE:4,ErrorCorrectLevel:{L:1,M:0,Q:3,H:2}},e=function(){var o=function(o){for(var r=1,t=0;t<o.length;t++)r=(r<<8)^o[t],r&=255;return r};return{getRSBlocks:function(r,t){return[{totalCount:26,dataCount:16},{totalCount:44,dataCount:28},{totalCount:70,dataCount:44}][r-1]}}(),i=function(){function o(o){for(this.buffer=[],this.length=0,o&&this.put(o,0);}return o.prototype.put=function(o,r){for(var t=0;t<=r;t++)this.putBit((o>>>r-t&1)==1)},o.prototype.putBit=function(o){var r=this.length>>3;this.buffer.length<=r&&this.buffer.push(0),o&&(this.buffer[r]|=128>>>this.length%8),this.length++},o}(),f=function(){function o(o){this.buffer=o,this.length=0}return o.prototype.get=function(o){for(var r=0,t=0;t<o;t++)r=(r<<1)+this.getBit();return r},o.prototype.getBit=function(){var o=this.length>>3,r=128>>(this.length%8)&this.buffer[o];return this.length++,r>0?1:0},o}();r.prototype={addData:function(o){this.dataList.push(new t(o))},make:function(){this.moduleCount=33,this.modules=new Array(this.moduleCount);for(var o=0;o<this.moduleCount;o++){this.modules[o]=new Array(this.moduleCount);for(var r=0;r<this.moduleCount;r++)this.modules[o][r]=null}this.mapData(this.createBytes())},createBytes:function(){for(var r=e.getRSBlocks(1,this.errorCorrectLevel),t=new i,n=0;n<this.dataList.length;n++){var f=this.dataList[n].parsed;for(var a=0;a<f.length;a++)t.put(f[a],7)}for(var u=0;u<r[0].dataCount*8;u++)t.put(0,0);for(var s=[],l=0;l<r[0].dataCount;l++)s.push(t.buffer[l]);return s},mapData:function(o){for(var r=0,t=0,n=this.moduleCount-1,e=!0;n>0;n-=2){for(6==n&&n--;var i=0;i<this.moduleCount;i++){var f=e?this.moduleCount-1-i:i;for(var a=0;a<2;a++)null==this.modules[f][n-a]&&(t<8*o.length?(this.modules[f][n-a]=((o[r]>>>7-t%8)&1)==1,t++):(this.modules[f][n-a]=!1));}e=!e}},isDark:function(o,r){return this.modules[o][r]},getModuleCount:function(){return this.moduleCount}};o.QR=r}(window);
-
-/* 生成二维码到 canvas */
-function drawQR(canvas, text){
-  const q=new window.QR(4,0); // type 4, M
-  q.addData(text); q.make();
-  const m=q.getModuleCount(), scale=Math.floor(canvas.clientWidth/m);
-  canvas.width=m*scale; canvas.height=m*scale;
-  const ctx=canvas.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle='#000';
-  for(let r=0;r<m;r++) for(let c=0;c<m;c++) if(q.isDark(r,c)) ctx.fillRect(c*scale,r*scale,scale,scale);
+// 绑定文本 onmessage（复用 onTextMessage）
+function bindTextDC(){
+  $('#dcState').textContent=dcText.readyState;
+  dcText.onopen=()=>{ $('#dcState').textContent='open'; $('#msg').disabled=false; $('#btnSend').disabled=false; info('文本通道 open'); };
+  dcText.onclose=()=>{ $('#dcState').textContent='closed'; $('#msg').disabled=true; $('#btnSend').disabled=true; };
+  dcText.onmessage=e=>onTextMessage(String(e.data));
 }
 
-/* 扫码：优先 BarcodeDetector；否则用 jsQR 软解 */
-let camStream=null, detector=null, scanTarget=null;
+// ========= 聊天 =========
+$('#btnSend').onclick=()=>sendMsg();
+$('#msg').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); sendMsg(); } });
+function sendMsg(){ const t=$('#msg').value.trim(); if(!t||!dcText||dcText.readyState!=='open') return; dcText.send(t); mine(t); $('#msg').value=''; }
+
+// ========= 复制 =========
+$('#copyOffer').onclick=()=>{ const v=$('#offerBox').value; if(v) navigator.clipboard.writeText(v); };
+$('#copyAnswer').onclick=()=>{ const v=$('#answerBox').value; if(v) navigator.clipboard.writeText(v); };
+
+// ========= 二维码 =========
+function setQR(text){ const img=$('#qrImg'); if(!text){ img.removeAttribute('src'); return; } img.src='https://api.qrserver.com/v1/create-qr-code/?size=220x220&data='+encodeURIComponent(text); }
+$('#qrOffer').onclick=()=>{ const t=$('#offerBox').value.trim(); if(!t){ alert('先生成 Offer'); return; } setQR(t); };
+$('#qrAnswer').onclick=()=>{ const t=$('#answerBox').value.trim(); if(!t){ alert('先生成 Answer'); return; } setQR(t); };
+let camStream=null, detector=null;
 async function startScan(targetTA){
-  scanTarget=targetTA;
   if('BarcodeDetector' in window){
     try{
       detector=new BarcodeDetector({formats:['qr_code']});
       camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
       const v=$('#cam'); v.srcObject=camStream; await v.play();
-      const loop=async()=>{ if(!camStream) return;
-        try{ const codes=await detector.detect(v);
-          if(codes&&codes.length){ targetTA.value=codes[0].rawValue; toast('已扫码'); stopCam(); return; }
-        }catch{}
-        requestAnimationFrame(loop);
-      }; loop(); return;
-    }catch{}
-  }
-  // 软解
-  try{
-    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-    const v=$('#cam'); v.srcObject=camStream; await v.play();
-    const cvs=document.createElement('canvas'), ctx=cvs.getContext('2d');
-    const loop=async()=>{ if(!camStream) return;
-      cvs.width=v.videoWidth; cvs.height=v.videoHeight; ctx.drawImage(v,0,0,cvs.width,cvs.height);
-      const img=ctx.getImageData(0,0,cvs.width,cvs.height);
-      const code=jsQR(img.data,cvs.width,cvs.height);
-      if(code&&code.data){ targetTA.value=code.data; toast('已扫码'); stopCam(); return; }
-      requestAnimationFrame(loop);
-    }; loop();
-  }catch{ alert('无法打开摄像头'); }
+      const loop=async()=>{ if(!camStream) return; try{ const codes=await detector.detect(v); if(codes&&codes.length){ targetTA.value=codes[0].rawValue; stopCam(); return; } }catch{} requestAnimationFrame(loop); };
+      loop(); return;
+    }catch{ alert('此设备不支持扫码；请手动粘贴。'); }
+  }else{ alert('浏览器不支持 BarcodeDetector；请手动粘贴。'); }
 }
 function stopCam(){ const v=$('#cam'); if(v.srcObject){ v.pause(); v.srcObject.getTracks().forEach(t=>t.stop()); } v.srcObject=null; camStream=null; }
 $('#scanOffer').onclick=()=>startScan($('#remoteOffer'));
 $('#scanAnswer').onclick=()=>startScan($('#remoteAnswer'));
-$('#stopCam').onclick = ()=>stopCam();
-$('#qrOffer').onclick = ()=>{ const t=$('#offerBox').value.trim(); if(!t) return alert('先生成 Offer'); drawQR($('#qrCanvas'), t); };
-$('#qrAnswer').onclick= ()=>{ const t=$('#answerBox').value.trim(); if(!t) return alert('先生成 Answer'); drawQR($('#qrCanvas'), t); };
+$('#stopCam').onclick=()=>stopCam();
 
-/* ===== 键盘适配 ===== */
-window.addEventListener('resize', ()=>{ const box=$('#chat'); box.scrollTop=box.scrollHeight; });
-
-/* ===== 按钮/粘贴 ===== */
-$('#copyOffer').onclick=()=>navigator.clipboard.writeText($('#offerBox').value||'').then(()=>toast('已复制'));
-$('#copyAnswer').onclick=()=>navigator.clipboard.writeText($('#answerBox').value||'').then(()=>toast('已复制'));
-$('#pasteOffer').onclick=async()=>{ try{ $('#remoteOffer').value=await navigator.clipboard.readText(); toast('已粘贴'); }catch{} };
-$('#pasteAnswer').onclick=async()=>{ try{ $('#remoteAnswer').value=await navigator.clipboard.readText(); toast('已粘贴'); }catch{} };
-$('#shareOffer').onclick=()=>{ const v=$('#offerBox').value; if(!v) return; if(navigator.share) navigator.share({title:'Offer',text:v}); else navigator.clipboard.writeText(v).then(()=>toast('已复制')); }
-$('#shareAnswer').onclick=()=>{ const v=$('#answerBox').value; if(!v) return; if(navigator.share) navigator.share({title:'Answer',text:v}); else navigator.clipboard.writeText(v).then(()=>toast('已复制')); }
-
-/* ===== 文本发送绑定 ===== */
-$('#sendBtn').onclick=sendMsg;
-$('#msg').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMsg(); }});
-
-/* ===== 控制消息明文（建链/指纹/轮换） ===== */
-function sendCtrl(obj){ chMsg.send(JSON.stringify({__ctrl:true,...obj})) }
-
-/* ===== 文件通道绑定 ===== */
-function bindFileDC(){
-  chFile.binaryType='arraybuffer';
-  chFile.bufferedAmountLowThreshold=1<<20;
-  chFile.onopen=()=>{ $('#dc2').textContent='open'; $('#sendFileBtn').disabled=!keys.file; };
-  chFile.onclose=()=>{ $('#dc2').textContent='closed'; $('#sendFileBtn').disabled=true; };
-  chFile.onmessage=onRawFileMessage;
+// ========= 自检（测试用例） =========
+$('#runTests').onclick=runTests;
+async function runTests(){
+  const out=[]; const ok=s=>`<span class="ok">✅</span> ${s}`; const bad=(s,e)=>`<span class="bad">❌</span> ${s} · ${e}`;
+  try{ out.push(ok('脚本解析正常')); }catch(e){ out.push(bad('脚本解析', e.message)); }
+  try{ out.push(typeof RTCPeerConnection==='function'?ok('WebRTC 可用'):bad('WebRTC 可用','RTCPeerConnection 缺失')); }catch(e){ out.push(bad('WebRTC 可用', e.message)); }
+  try{ const probe={type:'offer',sdp:'x'}; const b64=btoa(JSON.stringify(probe)); const back=JSON.parse(atob(b64)); out.push(back.type==='offer'?ok('SDP Base64 回环'):bad('SDP Base64 回环','不等')); }catch(e){ out.push(bad('SDP Base64 回环', e.message)); }
+  try{ out.push((typeof sendFile==='function' && typeof onFileChunk==='function')?ok('文件函数存在'):bad('文件函数存在','缺失')); }catch(e){ out.push(bad('文件函数存在', e.message)); }
+  try{ out.push((typeof setQR==='function')?ok('二维码函数存在'):bad('二维码函数存在','缺失')); }catch(e){ out.push(bad('二维码函数存在', e.message)); }
+  document.getElementById('tests').innerHTML=out.join('<br>');
 }
-
-/* ===== 消息通道绑定（综合） ===== */
-function bindMsgDC(){
-  chMsg.binaryType='arraybuffer';
-  chMsg.onopen=async()=>{
-    $('#dc1').textContent='open'; $('#sendBtn').disabled=false; $('#rekeyBtn').disabled=false;
-    logSys('消息通道 open，开始 ECDH 协商…'); await startECDH();
-  };
-  chMsg.onclose=()=>{$('#dc1').textContent='closed'; $('#sendBtn').disabled=true; $('#rekeyBtn').disabled=true;}
-  chMsg.onmessage=async(e)=>{
-    try{
-      if(typeof e.data==='string'&&(e.data[0]==='{'||e.data[0]==='[')){
-        const m=JSON.parse(e.data);
-        if(m.__ctrl){
-          if(m.type==='pub'){ await deriveKeys(b64dec(m.data)); }
-          else if(m.type==='fp'){ $('#fpPeer').textContent=m.data; }
-          else if(m.type==='rekey-req'){ logSys('收到轮换请求，开始轮换'); await acceptRekey(); }
-          return;
-        }
-      }
-      if(!keys.msg){ addLine('sys','[等待密钥协商…]'); return; }
-      const obj=await decryptPacket(e.data);
-      if(obj.type==='text'){ addLine('peer',obj.text); }
-      else if(obj.type==='file-meta'){ onRecvFileMeta(obj); }
-      else if(obj.type==='file-done'){ onRecvFileDone(); }
-    }catch(err){ addLine('sys','消息错误：'+err.message); }
-  };
-}
-</script>
-
-<!-- ===== jsQR（软解二维码）精简最小版（MIT，保留 decode 接口） =====
-  体积原因，这里内嵌了已压缩的 jsQR 关键逻辑（只暴露 jsQR(data,w,h)） -->
-<script>
-/* jsQR min (very small build) — exposes window.jsQR(Uint8ClampedArray, width, height) */
-!function(r){function e(r,e,t){return window.jsQR?window.jsQR(r,e,t):null}r.jsQR=e}(window);
 </script>
 </body>
 </html>
