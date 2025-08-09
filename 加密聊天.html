@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>匿名聊天</title>
+<style>
+  :root{--bg:#0e1117;--fg:#e6edf3;--mut:#9da7b3;--card:#151b23;--line:#222b37;--accent:#7aa2f7;--ok:#34d399;--bad:#ef4444}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto}
+  h1{font-size:18px;margin:14px 0}
+  .wrap{max-width:1100px;margin:0 auto;padding:14px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+  textarea,input[type=text]{width:100%;background:#0b0f14;color:var(--fg);border:1px solid #202736;border-radius:10px;padding:10px;font-family:ui-monospace,Consolas,monospace}
+  textarea{min-height:120px;resize:vertical}
+  button{cursor:pointer;border:1px solid #2a3350;background:#0f1524;color:var(--fg);padding:9px 12px;border-radius:10px;font-weight:600}
+  button.primary{background:linear-gradient(180deg,#1b2240,#12172e);border-color:#2b3564}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .pill{padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:#0f1422;color:#c9d2df;font-size:12px}
+  .chat{height:280px;overflow:auto;background:#0a0f17;border:1px solid #202736;border-radius:12px;padding:10px}
+  .me{color:#9ae6b4}.peer{color:#93c5fd}.sys{color:#fcd34d}
+  .hint{color:var(--mut);font-size:12px}
+  .mono{font-family:ui-monospace,Consolas,monospace}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔐 P2P 加密聊天（WebRTC + ECDH + AES-GCM）</h1>
+  <div class="hint">两步走：① 建立连接（复制 Offer/Answer）② 核对指纹 → 开聊。数据仅在两端浏览器内加密/解密。</div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>1) 建立连接</h3>
+      <div class="row">
+        <button id="btnOffer" class="primary">创建房间（生成 Offer）</button>
+        <button id="btnAnswer">加入房间（用 Offer 生成 Answer）</button>
+      </div>
+      <p class="hint">任意一方都可发起。把 Offer 粘给对方；对方生成 Answer 粘回。</p>
+      <label class="hint">本地 Offer：</label>
+      <textarea id="offerBox" placeholder="点击“创建房间”后生成"></textarea>
+      <div class="row">
+        <button id="copyOffer">复制 Offer</button>
+      </div>
+      <label class="hint">对方的 Offer（仅加入方需要粘贴在这里）：</label>
+      <textarea id="remoteOffer" placeholder="粘贴对方的 Offer，然后点“加入房间”"></textarea>
+
+      <label class="hint">本地 Answer：</label>
+      <textarea id="answerBox" placeholder="加入方生成后，发给创建方"></textarea>
+      <div class="row">
+        <button id="copyAnswer">复制 Answer</button>
+      </div>
+      <label class="hint">对方的 Answer（仅创建方需要粘贴在这里）：</label>
+      <textarea id="remoteAnswer" placeholder="粘贴对方的 Answer 完成连接"></textarea>
+
+      <div class="row" style="margin-top:8px">
+        <span class="pill">连接：<b id="connState">idle</b></span>
+        <span class="pill">通道：<b id="dcState">-</b></span>
+      </div>
+      <div class="hint">使用 Google STUN：stun.l.google.com:19302（可改自建 STUN/TURN）</div>
+    </div>
+
+    <div class="card">
+      <h3>2) 端到端加密</h3>
+      <div class="hint">连上后会自动进行 ECDH 密钥交换（P-256），派生 256 位 AES-GCM 会话密钥。</div>
+      <div class="row" style="margin:6px 0">
+        <span class="pill">我的指纹：<b class="mono" id="fpLocal">-</b></span>
+        <span class="pill">对方指纹：<b class="mono" id="fpPeer">-</b></span>
+      </div>
+      <div class="hint">请用其他渠道核对两边显示的**同一串** 12 位十六进制指纹（6字节）。一致→防中间人。</div>
+
+      <div class="chat" id="chat"></div>
+      <div class="row" style="margin-top:8px">
+        <input type="text" id="msg" placeholder="输入消息，回车发送…">
+        <button id="sendBtn" class="primary" disabled>发送</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ====== 小工具 ====== */
+const $ = sel => document.querySelector(sel);
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+function logSys(t){ addLine('sys', '🛈 '+t) }
+function addLine(who, text){
+  const box = $('#chat'); const p=document.createElement('div');
+  p.className=who; p.textContent = (who==='me'?'我: ': who==='peer'?'对方: ':'') + text;
+  box.appendChild(p); box.scrollTop = box.scrollHeight;
+}
+function b64enc(u8){return btoa(String.fromCharCode(...u8))}
+function b64dec(str){return new Uint8Array([...atob(str)].map(c=>c.charCodeAt(0)))}
+function hex(ab){return [...new Uint8Array(ab)].map(b=>b.toString(16).padStart(2,'0')).join('')}
+function pick(n){return crypto.getRandomValues(new Uint8Array(n))}
+
+/* ====== WebRTC 准备 ====== */
+const cfg = { iceServers:[{urls:"stun:stun.l.google.com:19302"}] };
+let pc, dc, isStarter=false;
+
+async function makePC(){
+  pc = new RTCPeerConnection(cfg);
+  pc.oniceconnectionstatechange = ()=> $('#connState').textContent = pc.iceConnectionState;
+  pc.onconnectionstatechange = ()=> $('#connState').textContent = pc.connectionState;
+  pc.onicecandidate = e=>{
+    // trickle: 文本里直接更新
+    if(e.candidate===null){
+      if(isStarter) $('#offerBox').value = btoa(JSON.stringify(pc.localDescription));
+      else $('#answerBox').value = btoa(JSON.stringify(pc.localDescription));
+    }
+  };
+  pc.ondatachannel = e=>{
+    dc = e.channel; bindDC();
+  };
+}
+
+function bindDC(){
+  dc.binaryType = 'arraybuffer';
+  dc.onopen = async ()=>{
+    $('#dcState').textContent = 'open';
+    $('#sendBtn').disabled=false;
+    logSys('DataChannel 已打开，开始密钥协商…');
+    await startECDH();
+  };
+  dc.onclose = ()=>{$('#dcState').textContent='closed'; $('#sendBtn').disabled=true;}
+  dc.onmessage = onRawMessage;
+}
+
+/* ====== 应用层加密：ECDH(P-256) + AES-GCM ====== */
+let myECDH, myPubRaw, aesKey=null, bothFP=null;
+
+async function startECDH(){
+  // 1) 生成本地 ECDH
+  myECDH = await crypto.subtle.generateKey(
+    {name:'ECDH', namedCurve:'P-256'}, true, ['deriveKey','deriveBits']
+  );
+  myPubRaw = await crypto.subtle.exportKey('raw', myECDH.publicKey); // 65字节
+  // 2) 发给对方
+  sendControl({type:'pub', data: b64enc(new Uint8Array(myPubRaw))});
+  // 3) 等待对方公钥 → derive
+}
+
+async function deriveAES(peerRaw){
+  const peerKey = await crypto.subtle.importKey(
+    'raw', peerRaw, {name:'ECDH', namedCurve:'P-256'}, true, []
+  );
+  aesKey = await crypto.subtle.deriveKey(
+    {name:'ECDH', public:peerKey}, myECDH.privateKey,
+    {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']
+  );
+  // 指纹：双方 raw pub 排序拼接后 SHA-256 → 取前 6 字节
+  const pubs = [new Uint8Array(myPubRaw), new Uint8Array(peerRaw)].sort((a,b)=>a[0]-b[0]||a.length-b.length);
+  const concat = new Uint8Array(pubs[0].length+pubs[1].length); concat.set(pubs[0],0); concat.set(pubs[1],pubs[0].length);
+  const digest = await crypto.subtle.digest('SHA-256', concat);
+  const fp = hex(digest).slice(0,12).toUpperCase();
+  bothFP = fp;
+  $('#fpLocal').textContent = fp;
+  sendControl({type:'fp', data:fp});
+  logSys('会话密钥就绪 ✅，已进入加密聊天。'); 
+}
+
+async function encryptText(txt){
+  const iv = pick(12);
+  const enc = new TextEncoder().encode(txt);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM', iv}, aesKey, enc));
+  // 发送：iv|ct → base64
+  const payload = b64enc(new Uint8Array([...iv, ...ct]));
+  return payload;
+}
+async function decryptText(payload){
+  const buf = b64dec(payload);
+  const iv = buf.slice(0,12), ct = buf.slice(12);
+  const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv}, aesKey, ct);
+  return new TextDecoder().decode(plain);
+}
+
+/* ====== 控制信令（走 DataChannel 内部） ====== */
+function sendControl(obj){
+  dc.send(JSON.stringify({__ctrl:true, ...obj}));
+}
+async function onRawMessage(e){
+  try{
+    // 可能是控制，也可能是密文
+    if(typeof e.data === 'string'){
+      const first = e.data[0];
+      if(first==='{' || first==='['){
+        const msg = JSON.parse(e.data);
+        if(msg.__ctrl){
+          if(msg.type==='pub'){ // 收到对方公钥
+            await deriveAES(b64dec(msg.data));
+          }else if(msg.type==='fp'){
+            $('#fpPeer').textContent = msg.data;
+          }
+          return;
+        }
+      }
+      // 普通字符串：加密负载
+      if(!aesKey){ addLine('peer','[等待密钥协商…]'); return; }
+      const text = await decryptText(e.data);
+      addLine('peer', text);
+    }else{
+      addLine('sys','[收到未知二进制数据]');
+    }
+  }catch(err){ addLine('sys','解密失败：'+err.message) }
+}
+
+/* ====== 发送消息 ====== */
+async function sendMsg(){
+  const input=$('#msg'); const text=input.value.trim(); if(!text) return;
+  if(!dc || dc.readyState!=='open'){ addLine('sys','通道未就绪'); return; }
+  if(!aesKey){ addLine('sys','密钥未协商完成'); return; }
+  const payload = await encryptText(text);
+  dc.send(payload);
+  addLine('me', text);
+  input.value='';
+}
+$('#sendBtn').onclick = sendMsg;
+$('#msg').addEventListener('keydown',e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMsg(); }});
+
+/* ====== 连接流程（手动复制粘贴信令） ====== */
+$('#btnOffer').onclick = async ()=>{
+  isStarter = true;
+  await makePC();
+  dc = pc.createDataChannel('chat',{ordered:true});
+  bindDC();
+  const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+  // 等 ICE gathering 结束后，onicecandidate 会把完整 SDP 写入 offerBox
+  $('#dcState').textContent='opening…';
+  logSys('已生成 Offer，把下方内容发给对方。');
+};
+
+$('#btnAnswer').onclick = async ()=>{
+  isStarter = false;
+  await makePC();
+  const remote = $('#remoteOffer').value.trim();
+  if(!remote){ alert('先粘贴对方的 Offer'); return; }
+  const offer = JSON.parse(atob(remote));
+  await pc.setRemoteDescription(new RTCSessionDescription(offer));
+  const answer = await pc.createAnswer(); await pc.setLocalDescription(answer);
+  logSys('已生成 Answer，把下方内容发回给对方。');
+};
+
+$('#copyOffer').onclick = ()=> { const v=$('#offerBox').value; if(!v) return; navigator.clipboard.writeText(v); };
+$('#copyAnswer').onclick = ()=> { const v=$('#answerBox').value; if(!v) return; navigator.clipboard.writeText(v); };
+
+$('#remoteAnswer').addEventListener('change', async ()=>{
+  const v = $('#remoteAnswer').value.trim(); if(!v) return;
+  const answer = JSON.parse(atob(v));
+  await pc.setRemoteDescription(new RTCSessionDescription(answer));
+  logSys('Answer 已设置，等待通道打开…');
+});
+</script>
+</body>
+</html>
